@@ -82,6 +82,7 @@ summary{cursor:pointer;color:var(--azul);font-size:14px}
     <label><input type="checkbox" id="humedad"> Humedades o arreglos visibles</label>
   </div>
   <label style="margin-top:10px">Notas (sin nombres ni teléfonos: esta página es pública)<input id="notas" placeholder="ej. lo pasó un colega, vacío, expensas $200.000" autocomplete="off"></label>
+  <label style="margin-top:8px"><input type="checkbox" id="comparables" checked> <b>Con comparables</b> (busca avisos del radar de la misma calle/barrio; si no, usa la mediana del barrio)</label>
   <div class="fila">
     <button id="calc">Calcular</button>
     <button class="sec" id="limpiar">Limpiar</button>
@@ -99,7 +100,8 @@ summary{cursor:pointer;color:var(--azul);font-size:14px}
   </div>
   <div id="rVeredicto" class="veredicto"></div>
   <table id="rAjustes"></table>
-  <p class="nota">Es una primera referencia: usa la mediana de precios publicados del barrio y ajustes estándar. No lee avisos uno por uno ni distingue por cantidad de dormitorios. Para un número fino o un informe, pedí la tasación completa.</p>
+  <div id="comp" class="oculto"></div>
+  <p class="nota">Es una primera referencia. Con "Con comparables" usa los avisos del radar de la misma calle o barrio; si no, la mediana del barrio con ajustes estándar. Para un número fino o un informe, pedí la tasación completa.</p>
 </section>
 
 <section id="msg" class="oculto">
@@ -154,6 +156,7 @@ var $=function(id){return document.getElementById(id)};
 // Copia de respaldo de las medianas (USD por m2 pedido), tomada del radar el 11/11/2026.
 var RESPALDO={"Nueva Córdoba":2000,"General Paz":1826,"Centro":1238,"Alberdi":1225,"Córdoba":1389,"Alto Alberdi":1292,"Alta Córdoba":1300,"Cofico":1449,"Güemes":1443,"Argüello":1689,"Villa Belgrano":2425,"Manantiales":1615,"Las Rosas":1985,"Jardín":1727,"Observatorio":1182};
 var MED=RESPALDO, FUENTE="copia del 11/11/2026 (no se pudo leer el radar)";
+var AVISOS=null, MEDDORM={};   // comparables: avisos.json y medianas.json por barrio+dorm
 var SUP0={nuevo:8,medio:0,viejo:-8,muyviejo:-15,excelente:3,bueno:0,refaccionar:-12,frente:2,contrafrente:-2,interno:-5,cochera:5,amenities:3,exterior:2,credito:1,sinEscritura:-15,humedad:-5,brecha:10,bomba:15,buena:5};
 var NOMBRES={nuevo:"A estrenar o hasta 5 años",medio:"6 a 15 años",viejo:"16 a 30 años",muyviejo:"Más de 30 años",excelente:"Estado excelente",bueno:"Estado bueno",refaccionar:"A refaccionar",frente:"Frente",contrafrente:"Contrafrente",interno:"Interno",cochera:"Cochera",amenities:"Amenities",exterior:"Balcón, patio o terraza",credito:"Apto crédito",sinEscritura:"Sin escritura",humedad:"Humedades",brecha:"Brecha publicado a cierre",bomba:"Descuento para que sea bomba",buena:"Descuento para que sea buena"};
 var mem={};
@@ -183,6 +186,16 @@ function pintarBarrios(){
 }
 
 function cargarMedianas(){
+  // primero medianas.json del radar; si no, se cae al scrapeo del index y al respaldo
+  return fetch("./medianas.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
+    if(!(j&&j.porBarrio&&Object.keys(j.porBarrio).length>=3)) throw 0;
+    MED=j.porBarrio; MEDDORM=j.porBarrioDorm||{}; FUENTE="radar"+(j.actualizado?" del "+j.actualizado:""); pintarBarrios();
+  }).catch(function(){ return cargarMedianasIndex(); });
+}
+function cargarAvisos(){
+  return fetch("./avisos.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){ if(Array.isArray(j)&&j.length) AVISOS=j; }).catch(function(){ AVISOS=null; });
+}
+function cargarMedianasIndex(){
   return fetch("./index.html",{cache:"no-store"}).then(function(r){if(!r.ok)throw new Error(r.status);return r.text()}).then(function(h){
     var d=new DOMParser().parseFromString(h,"text/html");
     var h2=[].slice.call(d.querySelectorAll("h2")).filter(function(x){return /Mediana USD\/m/.test(x.textContent)})[0];
@@ -222,6 +235,58 @@ function datos(){
     notas:$("notas").value.trim()};
 }
 
+function esc(s){ return (s||"").toString().replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]}) }
+// ---- Comparables (modo "Con comparables"): usa avisos.json del radar ----
+function normCalle(s){
+  return (s||"").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/\b(bv|blvd|bulevar|boulevard|av|avda|avenida|calle|pje|pasaje)\b\.?/g," ")
+    .replace(/[^a-z0-9ñ ]/g," ").replace(/\s+/g," ").trim();
+}
+function parseDir(s){
+  var m=(s||"").match(/([^\d,]+?)\s+(?:al\s+)?(\d{1,5})\b/);
+  if(m) return {calle:normCalle(m[1]), altura:parseInt(m[2],10)};
+  return {calle:normCalle((s||"").split(",")[0]), altura:null};
+}
+function dormNum(v){ if(v==="Monoambiente") return 0; var n=parseInt(v,10); return isNaN(n)?null:n; }
+function medArr(arr){
+  var v=arr.map(function(a){return a[3]/a[4]}).sort(function(x,y){return x-y});
+  if(!v.length) return 0; var h=Math.floor(v.length/2);
+  return v.length%2? v[h] : (v[h-1]+v[h])/2;
+}
+function buscarComparables(d){
+  if(!AVISOS) return null;
+  var pd=parseDir(d.dir), dn=dormNum(d.dorm);
+  var delBarrio=AVISOS.filter(function(a){ return a[2]===d.barrio && a[4]>0 && a[3]>0; });
+  var ref=MED[d.barrio]||(delBarrio.length?medArr(delBarrio):0);  // para descartar outliers
+  var val=delBarrio.filter(function(a){ var p=a[3]/a[4]; return !ref||(p>=0.5*ref && p<=2*ref); });
+  var l1=[],l2=[],l3=[];
+  val.forEach(function(a){
+    var ac=normCalle(a[0]), al=a[1];
+    if(pd.calle && ac===pd.calle){
+      if(pd.altura!=null && al!=null){
+        if(Math.abs(al-pd.altura)<=30) l1.push(a);
+        if(Math.abs(al-pd.altura)<=200) l2.push(a);
+      } else { l2.push(a); }   // misma calle, sin altura para afinar
+    }
+    if(dn!=null && a[5]!=null && Number(a[5])===dn && Math.abs(a[4]-d.m2)<=0.25*d.m2) l3.push(a);
+  });
+  var nivel,base,lista,etiqueta,pocos=false;
+  if(l1.length>=3){ nivel="edificio"; etiqueta="mismo edificio"; base=medArr(l1); lista=l1; }
+  else if(l2.length>=3){ nivel="calle"; etiqueta="misma calle"; base=medArr(l2); lista=l2; }
+  else if(l3.length>=3){ nivel="barrio"; etiqueta="mismo barrio, "+d.dorm+" dorm, m² similares"; base=medArr(l3); lista=l3; }
+  else {
+    pocos=true;
+    var bd=(MEDDORM[d.barrio]||{})[String(dn)];
+    if(bd){ nivel="barrio+dorm"; etiqueta="mediana de barrio + dormitorios"; base=bd; lista=l3; }
+    else { nivel="barrio-med"; etiqueta="mediana del barrio"; base=MED[d.barrio]||d.base; lista=l3; }
+  }
+  var rango=null;
+  if(lista.length){ var vs=lista.map(function(a){return a[3]/a[4]}).sort(function(x,y){return x-y}); rango=[Math.round(vs[0]),Math.round(vs[vs.length-1])]; }
+  return {base:Math.round(base), nivel:nivel, etiqueta:etiqueta, pocos:pocos,
+          l1:l1.length, l2:l2.length, l3:l3.length, n:lista.length,
+          lista:lista.slice().sort(function(a,b){return (a[3]/a[4])-(b[3]/b[4])}).slice(0,10), rango:rango};
+}
+
 function calcular(){
   var d=datos(), f=[];
   if(!d.dir) f.push("dirección");
@@ -231,14 +296,19 @@ function calcular(){
   if(!(d.m2>0)) f.push("m²");
   if(f.length){$("err").textContent="Falta: "+f.join(", ")+"."; return}
   $("err").textContent="";
+  var comp = ($("comparables") && $("comparables").checked) ? buscarComparables(d) : null;
+  var base = (comp && comp.base>0) ? comp.base : d.base;
+  var edificio = !!(comp && comp.nivel==="edificio");
   var aj=[];
   function suma(cond,k){ if(cond && SUP[k]) aj.push([NOMBRES[k],SUP[k]]) }
-  suma(d.ant,d.ant); suma(d.estado,d.estado); suma(d.disp,d.disp);
-  suma(d.cochera,"cochera"); suma(d.amenities,"amenities"); suma(d.exterior,"exterior"); suma(d.credito,"credito");
+  if(!edificio) suma(d.ant,d.ant);              // mismo edificio ya refleja la antigüedad
+  suma(d.estado,d.estado); suma(d.disp,d.disp); suma(d.cochera,"cochera");
+  if(!edificio) suma(d.amenities,"amenities");  // mismo edificio ya refleja los amenities
+  suma(d.exterior,"exterior"); suma(d.credito,"credito");
   suma(d.escr==="no","sinEscritura"); suma(d.humedad,"humedad");
   var total=aj.reduce(function(s,a){return s+a[1]},0);
-  var ppm=d.base*(1+total/100), valor=ppm*d.m2, cierre=valor*(1-SUP.brecha/100);
-  var r={d:d,aj:aj,total:total,ppm:ppm,valor:valor,cierre:cierre,min:valor*0.92,max:valor*1.08,desc:null,ver:"",clase:""};
+  var ppm=base*(1+total/100), valor=ppm*d.m2, cierre=valor*(1-SUP.brecha/100);
+  var r={d:d,aj:aj,total:total,ppm:ppm,valor:valor,cierre:cierre,min:valor*0.92,max:valor*1.08,desc:null,ver:"",clase:"",comp:comp,base:base};
   if(d.pedido>0){
     r.desc=(1-d.pedido/valor)*100;
     if(r.desc>=SUP.bomba){r.ver="Bomba: está "+pct(-r.desc).replace("-","")+" abajo del valor estimado. Antes de avanzar, verificá escritura, gravámenes, ocupación y obra.";r.clase="bomba"}
@@ -259,10 +329,26 @@ function pintar(r){
   else { $("tPedido").classList.remove("oculto"); $("rDesc").textContent=pct(-r.desc); $("rPedidoPpm").textContent="pedido: "+usd(r.d.pedido/r.d.m2)+" por m²"; v.className="veredicto "+r.clase; v.textContent=r.ver }
   var t=$("rAjustes"); t.innerHTML="";
   function fila(a,b){var tr=document.createElement("tr"),x=document.createElement("td"),y=document.createElement("td");x.textContent=a;y.textContent=b;y.className="num";tr.appendChild(x);tr.appendChild(y);t.appendChild(tr)}
-  fila("Mediana del barrio ("+(r.d.manual?"cargada a mano":r.d.barrio)+")",usd(r.d.base)+" por m²");
+  if(r.comp && r.comp.base>0) fila("Base: comparables ("+r.comp.etiqueta+")",usd(r.base)+" por m²");
+  else fila("Mediana del barrio ("+(r.d.manual?"cargada a mano":r.d.barrio)+")",usd(r.d.base)+" por m²");
   r.aj.forEach(function(a){fila(a[0],pct(a[1]))});
   fila("Ajuste total",pct(r.total)); fila("Valor por m² ajustado",usd(r.ppm)); fila("Superficie",r.d.m2.toLocaleString("es-AR")+" m²");
-  mensaje();
+  pintarComp(r); mensaje();
+}
+function pintarComp(r){
+  var box=$("comp"); if(!box) return;
+  if(!r.comp){ box.classList.add("oculto"); box.innerHTML=""; return; }
+  var c=r.comp;
+  var h="<p class=\"nota\"><b>Comparables</b> — mismo edificio: "+c.l1+" · misma calle: "+c.l2+" · mismo barrio+dorm: "+c.l3+".<br>Base usada: <b>"+c.etiqueta+"</b>"+(c.rango?" (de "+usd(c.rango[0])+" a "+usd(c.rango[1])+" por m²)":"")+(c.pocos?" — <b>pocos comparables</b>, se usó la mediana del barrio/dorm":"")+".</p>";
+  if(c.lista && c.lista.length){
+    h+="<table><tr><th>Dirección</th><th class='num'>Precio</th><th class='num'>m²</th><th class='num'>USD/m²</th><th></th></tr>";
+    c.lista.forEach(function(a){
+      var dir=((a[0]||"")+(a[1]!=null?" "+a[1]:"")).trim()||a[2]||"";
+      h+="<tr><td>"+esc(dir)+"</td><td class='num'>"+usd(a[3]).replace("USD ","")+"</td><td class='num'>"+a[4]+"</td><td class='num'>"+Math.round(a[3]/a[4]).toLocaleString("es-AR")+"</td><td>"+(a[6]?"<a href='"+esc(a[6])+"' target='_blank' rel='noopener'>ver</a>":"")+"</td></tr>";
+    });
+    h+="</table>";
+  }
+  box.innerHTML=h; box.classList.remove("oculto");
 }
 
 function ficha(d){
@@ -291,6 +377,7 @@ function mensaje(){
     t="Te paso la tasación rápida de "+d.dir+" ("+ficha(d)+", "+(d.manual?"barrio cargado a mano":d.barrio)+").\n\n"+
       "Valor estimado: "+mil(r.valor)+" ("+usd(r.ppm)+" por m²). Rango "+mil(r.min)+" a "+mil(r.max)+". Cierre estimado "+mil(r.cierre)+".\n"+
       (r.desc!==null?"Piden "+usd(d.pedido)+": "+r.ver+"\n":"Todavía no tenemos precio pedido.\n")+
+      (r.comp&&r.comp.n?"Comparables: "+r.comp.n+" ("+r.comp.etiqueta+")"+(r.comp.rango?", USD "+r.comp.rango[0]+"–"+r.comp.rango[1]+" por m²":"")+".\n":"")+
       (ex.length?"Datos: "+ex.join(", ")+".\n":"")+(d.notas?"Notas: "+d.notas+".\n":"")+
       "\nEs la rápida del radar (mediana del barrio con ajustes). ¿Conocés el edificio o algún cierre parecido en la zona?";
   } else if(modo==="colega"){
@@ -311,7 +398,8 @@ function fila(){
   var f=("0"+h.getDate()).slice(-2)+"/"+("0"+(h.getMonth()+1)).slice(-2)+"/"+h.getFullYear();
   return [f,d.dir,d.manual?"Otro":d.barrio,d.tipo,d.dorm,d.m2,d.ant?NOMBRES[d.ant]:"",d.estado?NOMBRES[d.estado]:"",d.disp,d.cochera?"Sí":"No",d.amenities?"Sí":"No",
     d.escr==="si"?"Sí":d.escr==="no"?"No":"",d.humedad?"Sí":"No",Math.round(d.base),Math.round(r.total*10)/10,Math.round(r.valor),Math.round(r.cierre),
-    d.pedido>0?Math.round(d.pedido):"",r.desc===null?"":Math.round(r.desc*10)/10,r.desc===null?"Sin precio":{bomba:"Bomba",buena:"Buena",mercado:"Precio de mercado",caro:"Caro"}[r.clase],d.para,d.notas];
+    d.pedido>0?Math.round(d.pedido):"",r.desc===null?"":Math.round(r.desc*10)/10,r.desc===null?"Sin precio":{bomba:"Bomba",buena:"Buena",mercado:"Precio de mercado",caro:"Caro"}[r.clase],d.para,
+    (r.comp&&r.comp.n?"Comparables: "+r.comp.n+" ("+r.comp.nivel+"). ":"")+(d.notas||"")];
 }
 function copiar(txt,dest){
   function listo(){dest.textContent="Copiado."; setTimeout(function(){dest.textContent=""},2500)}
@@ -344,7 +432,7 @@ $("enviar").addEventListener("click",function(){
     .catch(function(){$("gEstado").textContent="No se pudo enviar. Usá Copiar fila."});
 });
 
-pintarSupuestos(); pintarBarrios(); cargarMedianas();
+pintarSupuestos(); pintarBarrios(); cargarMedianas(); cargarAvisos();
 })();
 </script>
 </body>
