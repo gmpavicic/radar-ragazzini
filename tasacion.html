@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasación rápida · Ragazzini Radar</title>
+<style>
+:root{--azul:#1F3864;--azul2:#2F5597;--gris:#f4f6f9;--borde:#d5dbe5;--texto:#1c2430;--suave:#5b6675;--ok:#1b7f4b;--mal:#b00020}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;color:var(--texto);background:var(--gris);font-size:15px;line-height:1.4}
+header{background:var(--azul);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:20px}
+header p{margin:4px 0 0;font-size:13px;opacity:.85}
+header a{color:#fff}
+main{max-width:900px;margin:0 auto;padding:14px}
+section{background:#fff;border:1px solid var(--borde);border-radius:8px;padding:14px;margin-bottom:14px}
+h2{font-size:16px;margin:0 0 10px;color:var(--azul)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+label{display:block;font-size:13px;color:var(--suave)}
+label b{color:var(--mal)}
+input,select,textarea{width:100%;margin-top:3px;padding:8px;border:1px solid var(--borde);border-radius:6px;font-size:15px;font-family:inherit;background:#fff;color:var(--texto)}
+textarea{min-height:120px;resize:vertical}
+.checks{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px}
+.checks label{display:flex;align-items:center;gap:6px;color:var(--texto);font-size:14px}
+.checks input{width:auto;margin:0}
+button{background:var(--azul);color:#fff;border:0;border-radius:6px;padding:10px 14px;font-size:15px;cursor:pointer}
+button.sec{background:#fff;color:var(--azul);border:1px solid var(--azul)}
+button.chico{padding:6px 10px;font-size:13px}
+.fila{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.tarjetas{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.tarjeta{border:1px solid var(--borde);border-radius:8px;padding:10px;background:var(--gris)}
+.tarjeta .n{font-size:22px;font-weight:bold;color:var(--azul)}
+.tarjeta .t{font-size:12px;color:var(--suave)}
+.veredicto{margin-top:10px;padding:10px;border-radius:8px;font-weight:bold;border:1px solid var(--borde)}
+.veredicto.bomba{background:#e6f4ec;color:var(--ok);border-color:#b7dcc6}
+.veredicto.buena{background:#eaf0fa;color:var(--azul2);border-color:#c5d3ec}
+.veredicto.mercado{background:var(--gris);color:var(--texto)}
+.veredicto.caro{background:#fbe9ec;color:var(--mal);border-color:#f0c2ca}
+.nota{font-size:12px;color:var(--suave);margin-top:8px}
+.aviso{font-size:13px;color:var(--mal);margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}
+td,th{border-bottom:1px solid var(--borde);padding:5px 6px;text-align:left}
+th{color:var(--suave);font-weight:normal}
+td.num{text-align:right}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--azul);font-size:14px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.tabs button{background:#fff;color:var(--azul);border:1px solid var(--borde)}
+.tabs button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+.oculto{display:none}
+#ok{color:var(--ok);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tasación rápida</h1>
+  <p>Ragazzini Radar · <a href="./">volver al radar</a> · <span id="fuente">cargando medianas…</span></p>
+</header>
+<main>
+
+<section>
+  <h2>1. Datos de la propiedad</h2>
+  <div class="grid">
+    <label>Dirección <b>*</b><input id="dir" placeholder="ej. Bv. Chacabuco 787, 5° B" autocomplete="off"></label>
+    <label>Barrio <b>*</b><select id="barrio"></select></label>
+    <label id="lManual" class="oculto">USD por m² del barrio (a mano) <b>*</b><input id="manual" type="number" inputmode="numeric" placeholder="ej. 1500"></label>
+    <label>Tipo<select id="tipo"><option>Departamento</option><option>Casa</option><option>Dúplex</option><option>PH</option><option>Lote</option><option>Local u oficina</option></select></label>
+    <label>Dormitorios <b>*</b><select id="dorm"><option value="">Elegir</option><option>Monoambiente</option><option>1</option><option>2</option><option>3</option><option>4 o más</option><option>No aplica</option></select></label>
+    <label>m² (totales, con balcón) <b>*</b><input id="m2" type="number" inputmode="decimal" placeholder="ej. 65"></label>
+    <label>Precio pedido USD (si lo hay)<input id="pedido" type="number" inputmode="numeric" placeholder="ej. 125000"></label>
+    <label>Antigüedad<select id="ant"><option value="">No sé</option><option value="nuevo">A estrenar o hasta 5 años</option><option value="medio">6 a 15 años</option><option value="viejo">16 a 30 años</option><option value="muyviejo">Más de 30 años</option></select></label>
+    <label>Estado<select id="estado"><option value="">No sé</option><option value="excelente">Excelente o reciclado</option><option value="bueno">Bueno</option><option value="refaccionar">A refaccionar</option></select></label>
+    <label>Disposición<select id="disp"><option value="">No sé</option><option value="frente">Frente</option><option value="contrafrente">Contrafrente</option><option value="interno">Interno</option></select></label>
+    <label>Escritura<select id="escr"><option value="">No sé</option><option value="si">Con escritura</option><option value="no">Sin escritura (boleto o posesión)</option></select></label>
+    <label>Para qué es<select id="para"><option>Captación</option><option>Oportunidad para comprar</option><option>Revisar un publicado nuestro</option><option>Consulta de un dueño</option><option>Cliente comprador</option></select></label>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="cochera"> Cochera</label>
+    <label><input type="checkbox" id="amenities"> Amenities (pileta, SUM, seguridad)</label>
+    <label><input type="checkbox" id="exterior"> Balcón, patio o terraza</label>
+    <label><input type="checkbox" id="credito"> Apto crédito</label>
+    <label><input type="checkbox" id="humedad"> Humedades o arreglos visibles</label>
+  </div>
+  <label style="margin-top:10px">Notas (sin nombres ni teléfonos: esta página es pública)<input id="notas" placeholder="ej. lo pasó un colega, vacío, expensas $200.000" autocomplete="off"></label>
+  <div class="fila">
+    <button id="calc">Calcular</button>
+    <button class="sec" id="limpiar">Limpiar</button>
+    <span id="err" class="aviso"></span>
+  </div>
+</section>
+
+<section id="res" class="oculto">
+  <h2>2. Resultado</h2>
+  <div class="tarjetas">
+    <div class="tarjeta"><div class="t">Valor de mercado estimado</div><div class="n" id="rValor"></div><div class="t" id="rPpm"></div></div>
+    <div class="tarjeta"><div class="t">Rango</div><div class="n" id="rRango"></div><div class="t">más o menos 8%</div></div>
+    <div class="tarjeta"><div class="t">Cierre estimado</div><div class="n" id="rCierre"></div><div class="t" id="rBrecha"></div></div>
+    <div class="tarjeta" id="tPedido"><div class="t">Precio pedido contra el valor</div><div class="n" id="rDesc"></div><div class="t" id="rPedidoPpm"></div></div>
+  </div>
+  <div id="rVeredicto" class="veredicto"></div>
+  <table id="rAjustes"></table>
+  <p class="nota">Es una primera referencia: usa la mediana de precios publicados del barrio y ajustes estándar. No lee avisos uno por uno ni distingue por cantidad de dormitorios. Para un número fino o un informe, pedí la tasación completa.</p>
+</section>
+
+<section id="msg" class="oculto">
+  <h2>3. Mensaje para copiar</h2>
+  <div class="tabs">
+    <button data-m="dueno" class="on">Al dueño</button>
+    <button data-m="companero">A un compañero</button>
+    <button data-m="colega">A un colega</button>
+    <button data-m="completa">Pedido de tasación completa</button>
+  </div>
+  <textarea id="texto"></textarea>
+  <div class="fila"><button id="copiar">Copiar mensaje</button><span id="ok"></span></div>
+</section>
+
+<section id="guardar" class="oculto">
+  <h2>4. Guardar en la planilla</h2>
+  <div class="fila" style="margin-top:0">
+    <button id="enviar">Enviar a Radar Claude</button>
+    <button class="sec" id="copiarFila">Copiar fila para pegar</button>
+    <a id="abrir" target="_blank" rel="noopener" href="https://docs.google.com/spreadsheets/d/1-AA5u6Z3D5w8KAAKYdmAB7nVlZq570Ls3AEDElakC3Q/edit#gid=8">Abrir la planilla</a>
+  </div>
+  <p class="nota" id="gEstado">Copiar fila: pegala en la primera fila vacía de la pestaña Tasaciones rápidas.</p>
+  <details>
+    <summary>Configurar el envío automático (una sola vez por dispositivo)</summary>
+    <div class="grid" style="margin-top:8px">
+      <label>Dirección del script<input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off"></label>
+      <label>Clave<input id="cfgClave" autocomplete="off"></label>
+    </div>
+    <div class="fila"><button class="sec chico" id="cfgGuardar">Guardar</button><span class="nota" id="cfgEstado"></span></div>
+  </details>
+</section>
+
+<section>
+  <h2>Supuestos del cálculo</h2>
+  <p class="nota" style="margin-top:0">Porcentajes de partida sobre la mediana del barrio. Cambialos si no coinciden con lo que ven en la calle; quedan guardados en este dispositivo.</p>
+  <details>
+    <summary>Ver y cambiar los porcentajes</summary>
+    <div class="grid" id="sup" style="margin-top:8px"></div>
+    <div class="fila"><button class="sec chico" id="supReset">Volver a los valores de partida</button></div>
+  </details>
+  <details>
+    <summary>Medianas por barrio en uso</summary>
+    <table id="tMed"></table>
+  </details>
+</section>
+
+</main>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+// Copia de respaldo de las medianas (USD por m2 pedido), tomada del radar el 11/11/2026.
+var RESPALDO={"Nueva Córdoba":2000,"General Paz":1826,"Centro":1238,"Alberdi":1225,"Córdoba":1389,"Alto Alberdi":1292,"Alta Córdoba":1300,"Cofico":1449,"Güemes":1443,"Argüello":1689,"Villa Belgrano":2425,"Manantiales":1615,"Las Rosas":1985,"Jardín":1727,"Observatorio":1182};
+var MED=RESPALDO, FUENTE="copia del 11/11/2026 (no se pudo leer el radar)";
+var SUP0={nuevo:8,medio:0,viejo:-8,muyviejo:-15,excelente:3,bueno:0,refaccionar:-12,frente:2,contrafrente:-2,interno:-5,cochera:5,amenities:3,exterior:2,credito:1,sinEscritura:-15,humedad:-5,brecha:10,bomba:15,buena:5};
+var NOMBRES={nuevo:"A estrenar o hasta 5 años",medio:"6 a 15 años",viejo:"16 a 30 años",muyviejo:"Más de 30 años",excelente:"Estado excelente",bueno:"Estado bueno",refaccionar:"A refaccionar",frente:"Frente",contrafrente:"Contrafrente",interno:"Interno",cochera:"Cochera",amenities:"Amenities",exterior:"Balcón, patio o terraza",credito:"Apto crédito",sinEscritura:"Sin escritura",humedad:"Humedades",brecha:"Brecha publicado a cierre",bomba:"Descuento para que sea bomba",buena:"Descuento para que sea buena"};
+var mem={};
+function leer(k,def){try{var v=localStorage.getItem(k);return v===null?def:JSON.parse(v)}catch(e){return (k in mem)?mem[k]:def}}
+function guardar(k,v){mem[k]=v;try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+var SUP=Object.assign({},SUP0,leer("tr_sup",{}));
+var ultimo=null, modo="dueno";
+
+function usd(n){return "USD "+Math.round(n).toLocaleString("es-AR")}
+function mil(n){return usd(Math.round(n/1000)*1000)}
+function pct(n){return (n>0?"+":"")+(Math.round(n*10)/10).toLocaleString("es-AR")+"%"}
+
+function pintarBarrios(){
+  var s=$("barrio"), prev=s.value; s.innerHTML="";
+  var o=document.createElement("option"); o.value=""; o.textContent="Elegir"; s.appendChild(o);
+  Object.keys(MED).sort(function(a,b){return a.localeCompare(b,"es")}).forEach(function(b){
+    var op=document.createElement("option"); op.value=b; op.textContent=b+" ("+usd(MED[b])+" por m²)"; s.appendChild(op);
+  });
+  var m=document.createElement("option"); m.value="__manual"; m.textContent="Otro barrio (cargar el valor a mano)"; s.appendChild(m);
+  if(prev) s.value=prev;
+  var t=$("tMed"); t.innerHTML="<tr><th>Barrio</th><th>USD por m² publicado</th></tr>";
+  Object.keys(MED).sort(function(a,b){return MED[b]-MED[a]}).forEach(function(b){
+    var tr=document.createElement("tr"); tr.innerHTML="<td></td><td class='num'></td>";
+    tr.children[0].textContent=b; tr.children[1].textContent=usd(MED[b]); t.appendChild(tr);
+  });
+  $("fuente").textContent="medianas: "+FUENTE;
+}
+
+function cargarMedianas(){
+  return fetch("./index.html",{cache:"no-store"}).then(function(r){if(!r.ok)throw new Error(r.status);return r.text()}).then(function(h){
+    var d=new DOMParser().parseFromString(h,"text/html");
+    var h2=[].slice.call(d.querySelectorAll("h2")).filter(function(x){return /Mediana USD\/m/.test(x.textContent)})[0];
+    if(!h2) throw new Error("sin tabla");
+    var el=h2.nextElementSibling; while(el && el.tagName!=="TABLE"){ var t=el.querySelector&&el.querySelector("table"); if(t){el=t;break} el=el.nextElementSibling }
+    if(!el) throw new Error("sin tabla");
+    var out={};
+    [].slice.call(el.querySelectorAll("tr")).forEach(function(tr){
+      var td=tr.querySelectorAll("td"); if(td.length<3) return;
+      var b=td[0].textContent.replace(/[^\p{L}\p{N} .'-]/gu,"").trim();
+      var v=parseInt(td[2].textContent.replace(/[^\d]/g,""),10);
+      if(b && v>200 && v<20000) out[b]=v;
+    });
+    if(Object.keys(out).length<3) throw new Error("tabla vacía");
+    MED=out;
+    var f=(d.body.textContent.match(/actualizado\s+([\d\/]+\s+[\d:]+)/)||[])[1];
+    FUENTE="radar del "+(f||"día");
+  }).catch(function(){ MED=RESPALDO }).then(pintarBarrios);
+}
+
+function pintarSupuestos(){
+  var c=$("sup"); c.innerHTML="";
+  Object.keys(SUP0).forEach(function(k){
+    var l=document.createElement("label"); l.textContent=NOMBRES[k]+" (%)";
+    var i=document.createElement("input"); i.type="number"; i.step="0.5"; i.value=SUP[k];
+    i.addEventListener("change",function(){var v=parseFloat(i.value); SUP[k]=isNaN(v)?SUP0[k]:v; guardar("tr_sup",SUP); if(ultimo) calcular()});
+    l.appendChild(i); c.appendChild(l);
+  });
+}
+
+function datos(){
+  var b=$("barrio").value;
+  return {dir:$("dir").value.trim(),barrio:b==="__manual"?"Otro":b,manual:b==="__manual",base:b==="__manual"?parseFloat($("manual").value):MED[b],
+    tipo:$("tipo").value,dorm:$("dorm").value,m2:parseFloat($("m2").value),pedido:parseFloat($("pedido").value),
+    ant:$("ant").value,estado:$("estado").value,disp:$("disp").value,escr:$("escr").value,para:$("para").value,
+    cochera:$("cochera").checked,amenities:$("amenities").checked,exterior:$("exterior").checked,credito:$("credito").checked,humedad:$("humedad").checked,
+    notas:$("notas").value.trim()};
+}
+
+function calcular(){
+  var d=datos(), f=[];
+  if(!d.dir) f.push("dirección");
+  if(!$("barrio").value) f.push("barrio");
+  if(d.manual && !(d.base>0)) f.push("USD por m² del barrio");
+  if(!d.dorm) f.push("dormitorios");
+  if(!(d.m2>0)) f.push("m²");
+  if(f.length){$("err").textContent="Falta: "+f.join(", ")+"."; return}
+  $("err").textContent="";
+  var aj=[];
+  function suma(cond,k){ if(cond && SUP[k]) aj.push([NOMBRES[k],SUP[k]]) }
+  suma(d.ant,d.ant); suma(d.estado,d.estado); suma(d.disp,d.disp);
+  suma(d.cochera,"cochera"); suma(d.amenities,"amenities"); suma(d.exterior,"exterior"); suma(d.credito,"credito");
+  suma(d.escr==="no","sinEscritura"); suma(d.humedad,"humedad");
+  var total=aj.reduce(function(s,a){return s+a[1]},0);
+  var ppm=d.base*(1+total/100), valor=ppm*d.m2, cierre=valor*(1-SUP.brecha/100);
+  var r={d:d,aj:aj,total:total,ppm:ppm,valor:valor,cierre:cierre,min:valor*0.92,max:valor*1.08,desc:null,ver:"",clase:""};
+  if(d.pedido>0){
+    r.desc=(1-d.pedido/valor)*100;
+    if(r.desc>=SUP.bomba){r.ver="Bomba: está "+pct(-r.desc).replace("-","")+" abajo del valor estimado. Antes de avanzar, verificá escritura, gravámenes, ocupación y obra.";r.clase="bomba"}
+    else if(r.desc>=SUP.buena){r.ver="Buena, no bomba: "+pct(-r.desc).replace("-","")+" abajo del valor. Sirve para un cliente; para comprar y revender el margen es chico.";r.clase="buena"}
+    else if(r.desc>-SUP.buena){r.ver="Precio de mercado: el pedido está en línea con el valor estimado. No es oportunidad.";r.clase="mercado"}
+    else {r.ver="Caro: el pedido está "+pct(-r.desc)+" arriba del valor estimado.";r.clase="caro"}
+  }
+  ultimo=r; pintar(r);
+}
+
+function pintar(r){
+  $("res").classList.remove("oculto"); $("msg").classList.remove("oculto"); $("guardar").classList.remove("oculto");
+  $("rValor").textContent=mil(r.valor); $("rPpm").textContent=usd(r.ppm)+" por m²";
+  $("rRango").textContent=mil(r.min).replace("USD ","")+" a "+mil(r.max).replace("USD ","");
+  $("rCierre").textContent=mil(r.cierre); $("rBrecha").textContent=SUP.brecha+"% menos que el publicado";
+  var v=$("rVeredicto");
+  if(r.desc===null){ $("tPedido").classList.add("oculto"); v.className="veredicto mercado"; v.textContent="Sin precio pedido no hay veredicto de oportunidad. Si lo conseguís, cargalo y volvé a calcular." }
+  else { $("tPedido").classList.remove("oculto"); $("rDesc").textContent=pct(-r.desc); $("rPedidoPpm").textContent="pedido: "+usd(r.d.pedido/r.d.m2)+" por m²"; v.className="veredicto "+r.clase; v.textContent=r.ver }
+  var t=$("rAjustes"); t.innerHTML="";
+  function fila(a,b){var tr=document.createElement("tr"),x=document.createElement("td"),y=document.createElement("td");x.textContent=a;y.textContent=b;y.className="num";tr.appendChild(x);tr.appendChild(y);t.appendChild(tr)}
+  fila("Mediana del barrio ("+(r.d.manual?"cargada a mano":r.d.barrio)+")",usd(r.d.base)+" por m²");
+  r.aj.forEach(function(a){fila(a[0],pct(a[1]))});
+  fila("Ajuste total",pct(r.total)); fila("Valor por m² ajustado",usd(r.ppm)); fila("Superficie",r.d.m2.toLocaleString("es-AR")+" m²");
+  mensaje();
+}
+
+function ficha(d){
+  var p=[d.tipo.toLowerCase()];
+  if(d.dorm && d.dorm!=="No aplica") p.push(d.dorm==="Monoambiente"?"monoambiente":d.dorm+" dorm.");
+  p.push(d.m2.toLocaleString("es-AR")+" m²");
+  return p.join(", ");
+}
+function extras(d){
+  var e=[];
+  if(d.ant) e.push(NOMBRES[d.ant].toLowerCase());
+  if(d.estado) e.push(NOMBRES[d.estado].toLowerCase());
+  if(d.disp) e.push(d.disp);
+  if(d.cochera) e.push("con cochera"); if(d.amenities) e.push("con amenities"); if(d.exterior) e.push("con balcón o patio");
+  if(d.escr==="si") e.push("con escritura"); if(d.escr==="no") e.push("sin escritura");
+  if(d.credito) e.push("apto crédito"); if(d.humedad) e.push("con humedades o arreglos pendientes");
+  return e;
+}
+function mensaje(){
+  if(!ultimo) return; var r=ultimo,d=r.d,t="",ex=extras(d);
+  if(modo==="dueno"){
+    t="Hola, ¿cómo estás? Te paso una primera referencia para tu "+ficha(d)+" en "+(d.manual?d.dir:d.barrio)+".\n\n"+
+      "Por lo que se está publicando hoy en la zona, el valor de publicación estaría entre "+mil(r.min)+" y "+mil(r.max)+", con un cierre esperado cerca de "+mil(r.cierre)+".\n\n"+
+      "Es un número orientativo, hecho con precios publicados y los datos que me pasaste. Para afinarlo necesito verlo y confirmar metros, estado y papeles. ¿Te queda bien que coordinemos una visita esta semana?";
+  } else if(modo==="companero"){
+    t="Te paso la tasación rápida de "+d.dir+" ("+ficha(d)+", "+(d.manual?"barrio cargado a mano":d.barrio)+").\n\n"+
+      "Valor estimado: "+mil(r.valor)+" ("+usd(r.ppm)+" por m²). Rango "+mil(r.min)+" a "+mil(r.max)+". Cierre estimado "+mil(r.cierre)+".\n"+
+      (r.desc!==null?"Piden "+usd(d.pedido)+": "+r.ver+"\n":"Todavía no tenemos precio pedido.\n")+
+      (ex.length?"Datos: "+ex.join(", ")+".\n":"")+(d.notas?"Notas: "+d.notas+".\n":"")+
+      "\nEs la rápida del radar (mediana del barrio con ajustes). ¿Conocés el edificio o algún cierre parecido en la zona?";
+  } else if(modo==="colega"){
+    t="Hola, ¿cómo estás? Gracias por pasarme "+d.dir+".\n\n"+
+      (r.desc===null?"Lo estuve mirando contra lo publicado en la zona. ¿En cuánto lo tienen y hay margen de negociación?":
+       r.clase==="bomba"||r.clase==="buena"?"Lo estuve mirando contra lo publicado en la zona y el precio me cierra. ¿Me confirmás si tiene escritura, si está desocupado y cuál es el monto real de expensas?":
+       "Lo estuve mirando contra lo publicado en la zona y a "+usd(d.pedido)+" lo veo en precio de mercado, sin mucho margen. ¿Sabés si el dueño escucha ofertas, y hasta dónde?");
+  } else {
+    t="Tasación completa con PDF de "+d.dir+".\n\nDatos: "+ficha(d)+", "+(d.manual?"barrio a confirmar":d.barrio)+(ex.length?", "+ex.join(", "):"")+".\n"+
+      (d.pedido>0?"Precio pedido: "+usd(d.pedido)+".\n":"")+"Para qué: "+d.para+".\n"+(d.notas?"Notas: "+d.notas+".\n":"")+
+      "Tasación rápida del radar: "+mil(r.valor)+" ("+usd(r.ppm)+" por m²), rango "+mil(r.min)+" a "+mil(r.max)+".\n\nAdjunto fotos y lo que tenga de Catastro.";
+  }
+  $("texto").value=t;
+}
+
+function fila(){
+  var r=ultimo,d=r.d,h=new Date();
+  var f=("0"+h.getDate()).slice(-2)+"/"+("0"+(h.getMonth()+1)).slice(-2)+"/"+h.getFullYear();
+  return [f,d.dir,d.manual?"Otro":d.barrio,d.tipo,d.dorm,d.m2,d.ant?NOMBRES[d.ant]:"",d.estado?NOMBRES[d.estado]:"",d.disp,d.cochera?"Sí":"No",d.amenities?"Sí":"No",
+    d.escr==="si"?"Sí":d.escr==="no"?"No":"",d.humedad?"Sí":"No",Math.round(d.base),Math.round(r.total*10)/10,Math.round(r.valor),Math.round(r.cierre),
+    d.pedido>0?Math.round(d.pedido):"",r.desc===null?"":Math.round(r.desc*10)/10,r.desc===null?"Sin precio":{bomba:"Bomba",buena:"Buena",mercado:"Precio de mercado",caro:"Caro"}[r.clase],d.para,d.notas];
+}
+function copiar(txt,dest){
+  function listo(){dest.textContent="Copiado."; setTimeout(function(){dest.textContent=""},2500)}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(listo,function(){viejo()})} else viejo();
+  function viejo(){var ta=document.createElement("textarea");ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");listo()}catch(e){dest.textContent="No se pudo copiar: seleccioná el texto a mano."}document.body.removeChild(ta)}
+}
+
+$("barrio").addEventListener("change",function(){ $("lManual").classList.toggle("oculto",$("barrio").value!=="__manual") });
+$("calc").addEventListener("click",calcular);
+$("limpiar").addEventListener("click",function(){
+  ["dir","m2","pedido","notas","manual"].forEach(function(i){$(i).value=""});
+  ["barrio","dorm","ant","estado","disp","escr"].forEach(function(i){$(i).value=""});
+  ["cochera","amenities","exterior","credito","humedad"].forEach(function(i){$(i).checked=false});
+  $("lManual").classList.add("oculto"); ["res","msg","guardar"].forEach(function(i){$(i).classList.add("oculto")}); ultimo=null; $("err").textContent="";
+});
+[].slice.call(document.querySelectorAll(".tabs button")).forEach(function(b){
+  b.addEventListener("click",function(){ modo=b.getAttribute("data-m"); [].slice.call(document.querySelectorAll(".tabs button")).forEach(function(x){x.classList.toggle("on",x===b)}); mensaje() });
+});
+$("copiar").addEventListener("click",function(){copiar($("texto").value,$("ok"))});
+$("copiarFila").addEventListener("click",function(){ if(ultimo) copiar(fila().map(function(v){return typeof v==="number"?String(v).replace(".",","):String(v).replace(/[\t\n]/g," ")}).join("\t"),$("gEstado")) });
+$("supReset").addEventListener("click",function(){SUP=Object.assign({},SUP0);guardar("tr_sup",{});pintarSupuestos();if(ultimo)calcular()});
+var cfg=leer("tr_cfg",{url:"",clave:""}); $("cfgUrl").value=cfg.url||""; $("cfgClave").value=cfg.clave||"";
+$("cfgGuardar").addEventListener("click",function(){cfg={url:$("cfgUrl").value.trim(),clave:$("cfgClave").value.trim()};guardar("tr_cfg",cfg);$("cfgEstado").textContent="Guardado en este dispositivo."});
+$("enviar").addEventListener("click",function(){
+  if(!ultimo) return;
+  if(!/^https:\/\/script\.google\.com\//.test(cfg.url||"")){$("gEstado").textContent="El envío automático no está configurado en este dispositivo. Usá Copiar fila, o configuralo acá abajo.";return}
+  $("gEstado").textContent="Enviando…";
+  fetch(cfg.url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({clave:cfg.clave,fila:fila()})})
+    .then(function(){$("gEstado").textContent="Enviado. Abrí la planilla para confirmar que entró la fila."})
+    .catch(function(){$("gEstado").textContent="No se pudo enviar. Usá Copiar fila."});
+});
+
+pintarSupuestos(); pintarBarrios(); cargarMedianas();
+})();
+</script>
+</body>
+</html>
