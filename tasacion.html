@@ -83,6 +83,7 @@ summary{cursor:pointer;color:var(--azul);font-size:14px}
   </div>
   <label style="margin-top:10px">Notas (sin nombres ni teléfonos: esta página es pública)<input id="notas" placeholder="ej. lo pasó un colega, vacío, expensas $200.000" autocomplete="off"></label>
   <label style="margin-top:8px"><input type="checkbox" id="comparables" checked> <b>Con comparables</b> (busca avisos del radar de la misma calle/barrio; si no, usa la mediana del barrio)</label>
+  <label style="margin-top:4px"><input type="checkbox" id="negociado"> El precio es <b>negociado</b> (no el publicado) — el descuento se mide contra el cierre estimado</label>
   <div class="fila">
     <button id="calc">Calcular</button>
     <button class="sec" id="limpiar">Limpiar</button>
@@ -253,27 +254,46 @@ function medArr(arr){
   if(!v.length) return 0; var h=Math.floor(v.length/2);
   return v.length%2? v[h] : (v[h-1]+v[h])/2;
 }
+function dedup(arr){
+  // unifica avisos de la MISMA unidad: misma calle normalizada + altura, m²±4 y precio±6%
+  var u=[];
+  arr.forEach(function(a){
+    var f=null;
+    for(var i=0;i<u.length;i++){ var b=u[i].a;
+      if(normCalle(b[0])===normCalle(a[0]) && a[1]!=null && b[1]===a[1] &&
+         Math.abs((b[4]||0)-(a[4]||0))<=4 && Math.abs(b[3]-a[3])/Math.max(b[3],a[3])<=0.06){ f=u[i]; break; } }
+    if(f) f.veces++; else u.push({a:a,veces:1});
+  });
+  return u;
+}
+function medU(units){
+  var v=units.map(function(x){return x.a[3]/x.a[4]}).sort(function(x,y){return x-y});
+  if(!v.length) return 0; var h=Math.floor(v.length/2);
+  return v.length%2? v[h] : (v[h-1]+v[h])/2;
+}
 function buscarComparables(d){
   if(!AVISOS) return null;
   var pd=parseDir(d.dir), dn=dormNum(d.dorm);
   var delBarrio=AVISOS.filter(function(a){ return a[2]===d.barrio && a[4]>0 && a[3]>0; });
   var ref=MED[d.barrio]||(delBarrio.length?medArr(delBarrio):0);  // para descartar outliers
   var val=delBarrio.filter(function(a){ var p=a[3]/a[4]; return !ref||(p>=0.5*ref && p<=2*ref); });
-  var l1=[],l2=[],l3=[];
-  val.forEach(function(a){
-    var ac=normCalle(a[0]), al=a[1];
-    if(pd.calle && ac===pd.calle){
-      if(pd.altura!=null && al!=null){
-        if(Math.abs(al-pd.altura)<=30) l1.push(a);
-        if(Math.abs(al-pd.altura)<=200) l2.push(a);
-      } else { l2.push(a); }   // misma calle, sin altura para afinar
-    }
-    if(dn!=null && a[5]!=null && Number(a[5])===dn && Math.abs(a[4]-d.m2)<=0.25*d.m2) l3.push(a);
+  var unidades=dedup(val);  // unidades distintas (duplicados colapsados)
+  var l1=[],l2=[],l3=[],propias=[];
+  unidades.forEach(function(u){
+    var a=u.a, ac=normCalle(a[0]), al=a[1], mismaCalle=(pd.calle && ac===pd.calle);
+    var mismoEdif=(mismaCalle && al!=null && pd.altura!=null && Math.abs(al-pd.altura)<=30);
+    // unidad propia: mismo edificio y m² ±10% de lo cargado -> fuera de la mediana
+    if(mismoEdif && Math.abs(a[4]-d.m2)<=0.10*d.m2){ propias.push(u); return; }
+    if(mismaCalle && al!=null && pd.altura!=null){
+      if(Math.abs(al-pd.altura)<=30) l1.push(u);
+      if(Math.abs(al-pd.altura)<=200) l2.push(u);
+    } else if(mismaCalle){ l2.push(u); }
+    if(dn!=null && a[5]!=null && Number(a[5])===dn && Math.abs(a[4]-d.m2)<=0.25*d.m2) l3.push(u);
   });
   var nivel,base,lista,etiqueta,pocos=false;
-  if(l1.length>=3){ nivel="edificio"; etiqueta="mismo edificio"; base=medArr(l1); lista=l1; }
-  else if(l2.length>=3){ nivel="calle"; etiqueta="misma calle"; base=medArr(l2); lista=l2; }
-  else if(l3.length>=3){ nivel="barrio"; etiqueta="mismo barrio, "+d.dorm+" dorm, m² similares"; base=medArr(l3); lista=l3; }
+  if(l1.length>=3){ nivel="edificio"; etiqueta="mismo edificio"; base=medU(l1); lista=l1; }
+  else if(l2.length>=3){ nivel="calle"; etiqueta="misma calle"; base=medU(l2); lista=l2; }
+  else if(l3.length>=3){ nivel="barrio"; etiqueta="mismo barrio, "+d.dorm+" dorm, m² similares"; base=medU(l3); lista=l3; }
   else {
     pocos=true;
     var bd=(MEDDORM[d.barrio]||{})[String(dn)];
@@ -281,10 +301,10 @@ function buscarComparables(d){
     else { nivel="barrio-med"; etiqueta="mediana del barrio"; base=MED[d.barrio]||d.base; lista=l3; }
   }
   var rango=null;
-  if(lista.length){ var vs=lista.map(function(a){return a[3]/a[4]}).sort(function(x,y){return x-y}); rango=[Math.round(vs[0]),Math.round(vs[vs.length-1])]; }
+  if(lista.length){ var vs=lista.map(function(x){return x.a[3]/x.a[4]}).sort(function(x,y){return x-y}); rango=[Math.round(vs[0]),Math.round(vs[vs.length-1])]; }
   return {base:Math.round(base), nivel:nivel, etiqueta:etiqueta, pocos:pocos,
-          l1:l1.length, l2:l2.length, l3:l3.length, n:lista.length,
-          lista:lista.slice().sort(function(a,b){return (a[3]/a[4])-(b[3]/b[4])}).slice(0,10), rango:rango};
+          l1:l1.length, l2:l2.length, l3:l3.length, n:lista.length, propias:propias,
+          lista:lista.slice().sort(function(a,b){return (a.a[3]/a.a[4])-(b.a[3]/b.a[4])}).slice(0,10), rango:rango};
 }
 
 function calcular(){
@@ -308,13 +328,18 @@ function calcular(){
   suma(d.escr==="no","sinEscritura"); suma(d.humedad,"humedad");
   var total=aj.reduce(function(s,a){return s+a[1]},0);
   var ppm=base*(1+total/100), valor=ppm*d.m2, cierre=valor*(1-SUP.brecha/100);
-  var r={d:d,aj:aj,total:total,ppm:ppm,valor:valor,cierre:cierre,min:valor*0.92,max:valor*1.08,desc:null,ver:"",clase:"",comp:comp,base:base};
+  var neg = !!($("negociado") && $("negociado").checked);
+  var r={d:d,aj:aj,total:total,ppm:ppm,valor:valor,cierre:cierre,min:valor*0.92,max:valor*1.08,desc:null,ver:"",clase:"",comp:comp,base:base,neg:neg,descPub:null,descCierre:null};
   if(d.pedido>0){
-    r.desc=(1-d.pedido/valor)*100;
-    if(r.desc>=SUP.bomba){r.ver="Bomba: está "+pct(-r.desc).replace("-","")+" abajo del valor estimado. Antes de avanzar, verificá escritura, gravámenes, ocupación y obra.";r.clase="bomba"}
-    else if(r.desc>=SUP.buena){r.ver="Buena, no bomba: "+pct(-r.desc).replace("-","")+" abajo del valor. Sirve para un cliente; para comprar y revender el margen es chico.";r.clase="buena"}
-    else if(r.desc>-SUP.buena){r.ver="Precio de mercado: el pedido está en línea con el valor estimado. No es oportunidad.";r.clase="mercado"}
-    else {r.ver="Caro: el pedido está "+pct(-r.desc)+" arriba del valor estimado.";r.clase="caro"}
+    r.descPub=(1-d.pedido/valor)*100;       // contra el valor de publicación
+    r.descCierre=(1-d.pedido/cierre)*100;   // contra el cierre estimado
+    r.desc = neg ? r.descCierre : r.descPub;   // el que manda el veredicto
+    var contra = neg ? "el cierre estimado" : "el valor de publicación";
+    if(r.desc>=SUP.bomba){r.ver="Bomba: está "+pct(-r.desc).replace("-","")+" abajo de "+contra+". Antes de avanzar, verificá escritura, gravámenes, ocupación y obra.";r.clase="bomba"}
+    else if(r.desc>=SUP.buena){r.ver="Buena, no bomba: "+pct(-r.desc).replace("-","")+" abajo de "+contra+". Sirve para un cliente; para comprar y revender el margen es chico.";r.clase="buena"}
+    else if(r.desc>-SUP.buena){r.ver="Precio de mercado: el pedido está en línea con "+contra+". No es oportunidad.";r.clase="mercado"}
+    else {r.ver="Caro: el pedido está "+pct(-r.desc)+" arriba de "+contra+".";r.clase="caro"}
+    r.ver += " (vs publicación: "+pct(-r.descPub)+" · vs cierre estimado: "+pct(-r.descCierre)+(neg?"; se usa el negociado":"")+")";
   }
   ultimo=r; pintar(r);
 }
@@ -339,12 +364,16 @@ function pintarComp(r){
   var box=$("comp"); if(!box) return;
   if(!r.comp){ box.classList.add("oculto"); box.innerHTML=""; return; }
   var c=r.comp;
-  var h="<p class=\"nota\"><b>Comparables</b> — mismo edificio: "+c.l1+" · misma calle: "+c.l2+" · mismo barrio+dorm: "+c.l3+".<br>Base usada: <b>"+c.etiqueta+"</b>"+(c.rango?" (de "+usd(c.rango[0])+" a "+usd(c.rango[1])+" por m²)":"")+(c.pocos?" — <b>pocos comparables</b>, se usó la mediana del barrio/dorm":"")+".</p>";
+  var h="<p class=\"nota\"><b>Comparables</b> (unidades distintas) — mismo edificio: "+c.l1+" · misma calle: "+c.l2+" · mismo barrio+dorm: "+c.l3+".<br>Base usada: <b>"+c.etiqueta+"</b>"+(c.rango?" (de "+usd(c.rango[0])+" a "+usd(c.rango[1])+" por m²)":"")+(c.pocos?" — <b>pocos comparables</b>, se usó la mediana del barrio/dorm":"")+".</p>";
+  if(c.propias && c.propias.length){
+    h+="<p class=\"nota\" style=\"color:var(--azul)\"><b>Posiblemente esta misma unidad</b> (no entra en la mediana): "+
+      c.propias.map(function(u){return usd(u.a[3])+" ("+u.a[4]+" m², publicada "+u.veces+" "+(u.veces===1?"vez":"veces")+")"}).join(" · ")+".</p>";
+  }
   if(c.lista && c.lista.length){
-    h+="<table><tr><th>Dirección</th><th class='num'>Precio</th><th class='num'>m²</th><th class='num'>USD/m²</th><th></th></tr>";
-    c.lista.forEach(function(a){
-      var dir=((a[0]||"")+(a[1]!=null?" "+a[1]:"")).trim()||a[2]||"";
-      h+="<tr><td>"+esc(dir)+"</td><td class='num'>"+usd(a[3]).replace("USD ","")+"</td><td class='num'>"+a[4]+"</td><td class='num'>"+Math.round(a[3]/a[4]).toLocaleString("es-AR")+"</td><td>"+(a[6]?"<a href='"+esc(a[6])+"' target='_blank' rel='noopener'>ver</a>":"")+"</td></tr>";
+    h+="<table><tr><th>Dirección</th><th class='num'>Precio</th><th class='num'>m²</th><th class='num'>USD/m²</th><th>Publicaciones</th><th></th></tr>";
+    c.lista.forEach(function(u){
+      var a=u.a, dir=((a[0]||"")+(a[1]!=null?" "+a[1]:"")).trim()||a[2]||"";
+      h+="<tr><td>"+esc(dir)+"</td><td class='num'>"+usd(a[3]).replace("USD ","")+"</td><td class='num'>"+a[4]+"</td><td class='num'>"+Math.round(a[3]/a[4]).toLocaleString("es-AR")+"</td><td class='num'>"+(u.veces>1?"publicado "+u.veces+" veces":"1")+"</td><td>"+(a[6]?"<a href='"+esc(a[6])+"' target='_blank' rel='noopener'>ver</a>":"")+"</td></tr>";
     });
     h+="</table>";
   }
@@ -377,9 +406,13 @@ function mensaje(){
     t="Te paso la tasación rápida de "+d.dir+" ("+ficha(d)+", "+(d.manual?"barrio cargado a mano":d.barrio)+").\n\n"+
       "Valor estimado: "+mil(r.valor)+" ("+usd(r.ppm)+" por m²). Rango "+mil(r.min)+" a "+mil(r.max)+". Cierre estimado "+mil(r.cierre)+".\n"+
       (r.desc!==null?"Piden "+usd(d.pedido)+": "+r.ver+"\n":"Todavía no tenemos precio pedido.\n")+
-      (r.comp&&r.comp.n?"Comparables: "+r.comp.n+" ("+r.comp.etiqueta+")"+(r.comp.rango?", USD "+r.comp.rango[0]+"–"+r.comp.rango[1]+" por m²":"")+".\n":"")+
+      (r.comp&&r.comp.n?"Comparables: "+r.comp.n+" unidades distintas ("+r.comp.etiqueta+")"+(r.comp.rango?", USD "+r.comp.rango[0]+"–"+r.comp.rango[1]+" por m²":"")+".\n":"")+
+      (r.comp&&r.comp.propias&&r.comp.propias.length?"Posible misma unidad (aparte): "+r.comp.propias.map(function(u){return usd(u.a[3])}).join(", ")+".\n":"")+
       (ex.length?"Datos: "+ex.join(", ")+".\n":"")+(d.notas?"Notas: "+d.notas+".\n":"")+
-      "\nEs la rápida del radar (mediana del barrio con ajustes). ¿Conocés el edificio o algún cierre parecido en la zona?";
+      "\n"+((r.comp&&!r.comp.pocos&&r.comp.n)
+        ? "Base: "+r.comp.etiqueta+" ("+r.comp.n+" unidades distintas del radar con ajustes)."
+        : "Es la rápida del radar (mediana del barrio con ajustes).")+
+      " ¿Conocés el edificio o algún cierre parecido en la zona?";
   } else if(modo==="colega"){
     t="Hola, ¿cómo estás? Gracias por pasarme "+d.dir+".\n\n"+
       (r.desc===null?"Lo estuve mirando contra lo publicado en la zona. ¿En cuánto lo tienen y hay margen de negociación?":
@@ -412,9 +445,11 @@ $("calc").addEventListener("click",calcular);
 $("limpiar").addEventListener("click",function(){
   ["dir","m2","pedido","notas","manual"].forEach(function(i){$(i).value=""});
   ["barrio","dorm","ant","estado","disp","escr"].forEach(function(i){$(i).value=""});
-  ["cochera","amenities","exterior","credito","humedad"].forEach(function(i){$(i).checked=false});
-  $("lManual").classList.add("oculto"); ["res","msg","guardar"].forEach(function(i){$(i).classList.add("oculto")}); ultimo=null; $("err").textContent="";
+  ["cochera","amenities","exterior","credito","humedad","negociado"].forEach(function(i){$(i).checked=false});
+  $("comparables").checked=true;
+  $("lManual").classList.add("oculto"); ["res","msg","guardar","comp"].forEach(function(i){$(i).classList.add("oculto")}); ultimo=null; $("err").textContent="";
 });
+["comparables","negociado"].forEach(function(i){ var el=$(i); if(el) el.addEventListener("change",function(){ if(ultimo) calcular() }) });
 [].slice.call(document.querySelectorAll(".tabs button")).forEach(function(b){
   b.addEventListener("click",function(){ modo=b.getAttribute("data-m"); [].slice.call(document.querySelectorAll(".tabs button")).forEach(function(x){x.classList.toggle("on",x===b)}); mensaje() });
 });
